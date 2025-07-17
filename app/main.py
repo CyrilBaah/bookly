@@ -4,8 +4,9 @@ from fastapi import FastAPI, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
-app = FastAPI()
-
+app = FastAPI(
+    title="Bookly API", description="API for managing books with observability"
+)
 
 books = [
     {
@@ -80,3 +81,9 @@ def delete_book(book_id: int):
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health_check():
     return {"status": "ok", "message": "API is running smoothly"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
