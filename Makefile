@@ -1,14 +1,14 @@
 # Define variables
-CLUSTER_NAME := dev
+CLUSTER_NAME := bookly-cluster
 IMAGE_NAME := bookly-api
 CONTAINER_NAME := bookly-api
 PORT := 8000
 
-.PHONY: create-cluster get-cluster set-context delete-cluster install-nginxingresscontroller get-nginxingress get-logs cluster-info get-nodes get-pods expose-frontend build run stop remove remove-image ps ps-all images exec clean help
+.PHONY: create-cluster get-cluster set-context delete-cluster install-nginxingresscontroller get-nginxingress get-logs cluster-info get-nodes get-pods expose-frontend build run stop remove remove-image ps ps-all images exec clean help install-monitoring install-prometheus install-loki install-tempo deploy-app run-load-test
 
 create-cluster:
 	@echo "Creating Kind cluster..."
-	kind create cluster --config ./ops/kind/config.yml --name $(CLUSTER_NAME)
+	kind create cluster --config ./ops/kind/config.yml
 
 get-cluster:
 	@echo "Getting Kind clusters..."
@@ -25,9 +25,18 @@ delete-cluster:
 push-image:
 	docker push cyrilbaah/bookly-api:latest
 
+load-image-to-kind:
+	@echo "Loading Docker image to Kind cluster..."
+	kind load docker-image cyrilbaah/bookly-api:latest --name $(CLUSTER_NAME)
+
 install-nginxingresscontroller:
 	@echo "Install NGINX Ingress Controller..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/provider/kind/deploy.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "Waiting for ingress controller to be ready..."
+	kubectl wait --namespace ingress-nginx \
+	  --for=condition=ready pod \
+	  --selector=app.kubernetes.io/component=controller \
+	  --timeout=90s
 
 get-nginxingress:
 	@echo "Get nginxingress pods..."
@@ -49,9 +58,21 @@ get-pods:
 	@echo "Get cluster pods..."
 	kubectl get pods -owide
 
+get-all:
+	@echo "Get all resources..."
+	kubectl get all --all-namespaces
+
 expose-backend:
 	@echo "Get port for backend..."
 	kubectl port-forward svc/$(CONTAINER_NAME) -n default 8000:8000
+
+expose-grafana:
+	@echo "Exposing Grafana dashboard..."
+	kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80
+
+expose-prometheus:
+	@echo "Exposing Prometheus dashboard..."
+	kubectl port-forward svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090
 
 build:
 	docker build -t cyrilbaah/$(IMAGE_NAME) -f ./app/Dockerfile .
@@ -85,6 +106,55 @@ clean:
 	docker rm $(shell docker ps -aq) || true
 	docker rmi $(shell docker images -aq) || true
 
+# Monitoring stack commands
+install-monitoring: install-prometheus install-loki install-tempo
+	@echo "Monitoring stack installed"
+	@echo "Deploying ServiceMonitor for Prometheus..."
+	kubectl apply -f ./ops/k8s/app/service-monitor.yaml || echo "Note: If this fails, wait a few seconds for the CRDs to be fully established and run 'make deploy-service-monitor'"
+
+install-prometheus:
+	@echo "Installing Prometheus stack (includes Grafana)..."
+	kubectl create namespace monitoring || true
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+	helm repo update
+	helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+		-f ./ops/k8s/monitoring/prometheus-values.yaml \
+		--namespace monitoring \
+		--create-namespace
+
+install-loki:
+	@echo "Installing Loki..."
+	helm repo add grafana https://grafana.github.io/helm-charts || true
+	helm repo update
+	helm upgrade --install loki grafana/loki \
+		-f ./ops/k8s/monitoring/loki-values.yaml \
+		--namespace monitoring \
+		--create-namespace
+
+install-tempo:
+	@echo "Installing Tempo..."
+	helm upgrade --install tempo grafana/tempo \
+		-f ./ops/k8s/monitoring/tempo-values.yaml \
+		--namespace monitoring \
+		--create-namespace
+
+# Application deployment
+deploy-app:
+	@echo "Deploying bookly-api application..."
+	kubectl apply -f ./ops/k8s/app/deployment.yaml
+	kubectl apply -f ./ops/k8s/app/service.yaml
+	kubectl apply -f ./ops/k8s/app/ingress.yaml
+	@echo "Note: ServiceMonitor will be applied after installing the monitoring stack"
+
+deploy-service-monitor:
+	@echo "Deploying ServiceMonitor for Prometheus..."
+	kubectl apply -f ./ops/k8s/app/service-monitor.yaml
+
+# Load testing
+run-load-test:
+	@echo "Running k6 load test..."
+	k6 run ./ops/k6/load-test.js
+
 decode:
 	@echo "Decode the secret..."
 	@echo "$ echo -n 'decodeyourwordhere' | base64 --decode"
@@ -99,9 +169,13 @@ help:
 	@echo "  get-cluster      - List available Kind clusters"
 	@echo "  set-context      - Set kubectl context to the Kind cluster"
 	@echo "  delete-cluster   - Delete the Kind cluster"
+	@echo "  load-image-to-kind - Load Docker image to Kind cluster"
 	@echo "  get-pods         - List all pods"
 	@echo "  get-nodes        - List all nodes"
+	@echo "  get-all          - List all resources in all namespaces"
 	@echo "  expose-backend   - Makes backend app accessible"
+	@echo "  expose-grafana   - Expose Grafana dashboard on port 3000"
+	@echo "  expose-prometheus - Expose Prometheus dashboard on port 9090"
 	@echo "  get-nginxingress - List all nginx ingress"
 	@echo "  get-logs         - Get logs command"
 	@echo "  build            - Build Docker image"
@@ -114,6 +188,13 @@ help:
 	@echo "  images           - View Docker images"
 	@echo "  exec             - Execute a command inside the running container"
 	@echo "  clean            - Clean up (stop and remove) all containers and images"
+	@echo "  install-monitoring - Install the complete monitoring stack"
+	@echo "  install-prometheus - Install Prometheus and Grafana"
+	@echo "  install-loki     - Install Loki for log aggregation"
+	@echo "  install-tempo    - Install Tempo for distributed tracing"
+	@echo "  deploy-app       - Deploy the application to Kubernetes"
+	@echo "  deploy-service-monitor - Deploy the ServiceMonitor for Prometheus"
+	@echo "  run-load-test    - Run k6 load test against the application"
 	@echo "  help             - Display this help message"
 
 .DEFAULT_GOAL := help
