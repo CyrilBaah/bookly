@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bookly-api
+  labels:
+    app: bookly-api
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: bookly-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s

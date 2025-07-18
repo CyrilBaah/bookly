@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bookly-api
+  labels:
+    app: bookly-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bookly-api
+  template:
+    metadata:
+      labels:
+        app: bookly-api
+    spec:
+      containers:
+      - name: bookly-api
+        image: cyrilbaah/bookly-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: "256Mi"
+          requests:
+            cpu: "0.2"
+            memory: "128Mi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
