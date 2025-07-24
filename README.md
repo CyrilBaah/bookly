@@ -12,12 +12,6 @@ A FastAPI-based API for a book management system.
 
 ## Getting Started
 
-### Build the Docker Image
-
-```bash
-make build
-```
-
 ### Create a KinD Cluster
 
 ```bash
@@ -50,8 +44,6 @@ make install-monitoring
 
 This will install:
 - Prometheus (metrics collection)
-- Loki (log aggregation)
-- Tempo (distributed tracing)
 - Grafana (visualization)
 
 ### Access the Services
@@ -110,14 +102,7 @@ After installing the monitoring stack, you can access Grafana and explore the fo
 - Node metrics
 - Pod metrics
 - Application metrics
-- Logs via Loki
-- Traces via Tempo
 
 ### Connecting the Dots
 
-The monitoring stack is configured to connect:
-- Metrics from Prometheus
-- Logs from Loki
-- Traces from Tempo
-
-This allows for a seamless debugging experience where you can navigate from metrics to logs to traces.
+The monitoring stack is configured to collect and visualize metrics from Prometheus through Grafana dashboards, providing insights into your application and cluster performance.

@@ -4,7 +4,7 @@ IMAGE_NAME := bookly-api
 CONTAINER_NAME := bookly-api
 PORT := 8000
 
-.PHONY: create-cluster get-cluster set-context delete-cluster install-nginxingresscontroller get-nginxingress get-logs cluster-info get-nodes get-pods expose-frontend build run stop remove remove-image ps ps-all images exec clean help install-monitoring install-prometheus install-loki install-tempo deploy-app run-load-test
+.PHONY: create-cluster get-cluster set-context delete-cluster install-nginxingresscontroller get-nginxingress get-logs cluster-info get-nodes get-pods expose-frontend build run stop remove remove-image ps ps-all images exec clean help install-monitoring install-prometheus deploy-app run-load-test 
 
 create-cluster:
 	@echo "Creating Kind cluster..."
@@ -74,6 +74,24 @@ expose-prometheus:
 	@echo "Exposing Prometheus dashboard..."
 	kubectl port-forward svc/prometheus-kube-prometheus-prometheus -n monitoring 9090:9090
 
+view-app-logs:
+	@echo "Viewing application logs through Grafana..."
+	@echo "Access Grafana at http://localhost:3000 and use Explore"
+	@echo ""
+	@echo "If port 3000 is already in use, try a different port:"
+	@echo "kubectl port-forward svc/prometheus-grafana -n monitoring 3001:80"
+	@echo "Then access Grafana at http://localhost:3001"
+	@echo ""
+	kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80 || kubectl port-forward svc/prometheus-grafana -n monitoring 3001:80
+
+view-direct-logs:
+	@echo "Viewing application logs directly from Kubernetes..."
+	@POD_NAME=$$(kubectl get pods -l app=bookly-api -o jsonpath="{.items[0].metadata.name}") && \
+	echo "Viewing logs for pod: $$POD_NAME" && \
+	echo "Press Ctrl+C to exit" && \
+	echo "" && \
+	kubectl logs -f $$POD_NAME
+
 build:
 	docker build -t cyrilbaah/$(IMAGE_NAME) -f ./app/Dockerfile .
 
@@ -107,7 +125,7 @@ clean:
 	docker rmi $(shell docker images -aq) || true
 
 # Monitoring stack commands
-install-monitoring: install-prometheus install-loki install-tempo
+install-monitoring: install-prometheus
 	@echo "Monitoring stack installed"
 	@echo "Deploying ServiceMonitor for Prometheus..."
 	kubectl apply -f ./ops/k8s/app/service-monitor.yaml || echo "Note: If this fails, wait a few seconds for the CRDs to be fully established and run 'make deploy-service-monitor'"
@@ -119,22 +137,6 @@ install-prometheus:
 	helm repo update
 	helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
 		-f ./ops/k8s/monitoring/prometheus-values.yaml \
-		--namespace monitoring \
-		--create-namespace
-
-install-loki:
-	@echo "Installing Loki..."
-	helm repo add grafana https://grafana.github.io/helm-charts || true
-	helm repo update
-	helm upgrade --install loki grafana/loki \
-		-f ./ops/k8s/monitoring/loki-values.yaml \
-		--namespace monitoring \
-		--create-namespace
-
-install-tempo:
-	@echo "Installing Tempo..."
-	helm upgrade --install tempo grafana/tempo \
-		-f ./ops/k8s/monitoring/tempo-values.yaml \
 		--namespace monitoring \
 		--create-namespace
 
@@ -188,10 +190,8 @@ help:
 	@echo "  images           - View Docker images"
 	@echo "  exec             - Execute a command inside the running container"
 	@echo "  clean            - Clean up (stop and remove) all containers and images"
-	@echo "  install-monitoring - Install the complete monitoring stack"
+	@echo "  install-monitoring - Install the monitoring stack (Prometheus and Grafana)"
 	@echo "  install-prometheus - Install Prometheus and Grafana"
-	@echo "  install-loki     - Install Loki for log aggregation"
-	@echo "  install-tempo    - Install Tempo for distributed tracing"
 	@echo "  deploy-app       - Deploy the application to Kubernetes"
 	@echo "  deploy-service-monitor - Deploy the ServiceMonitor for Prometheus"
 	@echo "  run-load-test    - Run k6 load test against the application"

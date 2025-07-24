@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-kube-prometheus-grafana-datasource
+  namespace: monitoring
+data:
+  datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: "Prometheus"
+      type: prometheus
+      uid: prometheus
+      url: http://prometheus-kube-prometheus-prometheus.monitoring:9090/
+      access: proxy
+      isDefault: true
+      jsonData:
+        httpMethod: POST
+        timeInterval: 30s
+    - name: "Alertmanager"
+      type: alertmanager
+      uid: alertmanager
+      url: http://prometheus-kube-prometheus-alertmanager.monitoring:9093/
+      access: proxy
+      jsonData:
+        handleGrafanaManagedAlerts: false
+        implementation: prometheus
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring:4318
+      access: proxy
+      isDefault: false
+      jsonData:
+        httpMethod: GET
+        nodeGraph:
+          enabled: true
+        search:
+          hide: false
+        serviceMap:
+          datasourceUid: prometheus
