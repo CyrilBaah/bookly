@@ -1,0 +1,32 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: bookly-cluster
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+  # For Grafana
+  - containerPort: 3000
+    hostPort: 3000
+    protocol: TCP
+  # For Prometheus
+  - containerPort: 9090
+    hostPort: 9090
+    protocol: TCP
+  # For Bookly API
+  - containerPort: 8000
+    hostPort: 8000
+    protocol: TCP
+- role: worker
+- role: worker
